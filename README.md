@@ -1,4 +1,4 @@
-# mwas_mqtl
+# RKJcollab Tutorials
 
 Repository for RKJcollab tutorials. Each subfolder of the tutorials repository contains a separate tutorial.
 See descriptions of each tutorial below.
