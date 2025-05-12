@@ -1,0 +1,143 @@
+---
+title: "mQTL"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: kable
+    code_folding: hide
+knit: (function(inputFile, encoding) {rmarkdown::render(inputFile, encoding = encoding, output_dir = "/sbgenomics/output-files") })
+
+---
+
+## Running QTL analysis with Matrix eQTL
+
+Note: we are only running chromosome 11 
+
+```{r matrixeqtl}
+install.packages(c("MatrixEQTL","metafolio"), repos = "http://cran.us.r-project.org")
+library(MatrixEQTL)
+
+## Settings
+SNP_file_name = "../project-files/genotypes.txt"
+output_file_name = "../output-files/chr_11_assoc.txt" 
+expression_file_name = "../project-files/compounds.txt"
+covariates_file_name = "../project-files/covariates.txt"
+useModel = modelLINEAR 
+pvOutputThreshold = 0.05
+
+## Load genotype data
+snps = SlicedData$new();
+snps$fileDelimiter = "\t";      # the TAB character
+snps$fileOmitCharacters = "NA"; # denote missing values;
+snps$fileSkipRows = 1;          # one row of column labels
+snps$fileSkipColumns = 1;       # one column of row labels
+snps$fileSliceSize = 2000;      # read file in slices of 2,000 rows
+snps$LoadFile(SNP_file_name);
+
+## Load gene expression data
+gene = SlicedData$new();
+gene$fileDelimiter = "\t";      # the TAB character
+gene$fileOmitCharacters = "NA"; # denote missing values;
+gene$fileSkipRows = 1;          # one row of column labels
+gene$fileSkipColumns = 1;       # one column of row labels
+gene$fileSliceSize = 2000;      # read file in slices of 2,000 rows
+gene$LoadFile(expression_file_name);
+
+## Load covariates
+cvrt = SlicedData$new();
+cvrt$fileDelimiter = "\t";      # the TAB character
+cvrt$fileOmitCharacters = "NA"; # denote missing values;
+cvrt$fileSkipRows = 1;          # one row of column labels
+cvrt$fileSkipColumns = 1;       # one column of row labels
+if(length(covariates_file_name)>0) {
+  cvrt$LoadFile(covariates_file_name);
+}
+
+## Run the analysis
+me = Matrix_eQTL_engine(
+  snps = snps,
+  gene = gene,
+  cvrt = cvrt,
+  output_file_name = output_file_name,
+  pvOutputThreshold = pvOutputThreshold,
+  useModel = useModel, 
+  verbose = TRUE,
+  pvalue.hist = "qqplot",
+  min.pv.by.genesnp = FALSE,
+  noFDRsaveMemory = FALSE);
+
+```
+
+## QQ plot
+
+```{r qq_plot}
+plot(me)
+```
+
+## Inspect top results
+
+```{r assoc}
+assoc.frame <- read.delim("../output-files/chr_11_assoc.txt", stringsAsFactors = F, head=T)
+head(assoc.frame, 20)
+```
+
+## Locus zoom plot of lead association
+
+An excellent alternative online resource: http://locuszoom.org
+
+```{r locuszoom, fig.width=10, fig.height=10}
+#First, extract the chromosome nr and position
+assoc.frame$CHR <- 11
+assoc.frame$POS <- as.numeric(unlist(strsplit(assoc.frame$SNP, split=":"))[seq(2,nrow(assoc.frame)*5,5)]) 
+
+#Let's subset to +- 500KB from the lead SNP and for the specific compound only
+sel.pos <- 61548559
+range <- 1E6
+locus.frame <- assoc.frame[
+  (assoc.frame$gene == "LPC.20.4.") & 
+  (assoc.frame$POS >= sel.pos-range) & 
+  (assoc.frame$POS <= sel.pos+range),
+]
+
+#Annotate the gene region using biomaRt
+library(biomaRt) 
+library(ggplot2)
+library(patchwork)
+library(forcats)
+library(dplyr)
+gene.ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", GRCh = 37) # we will need an additional mart for genes
+out.bm.genes.region <- getBM(
+  attributes = c('start_position','end_position','ensembl_gene_id','external_gene_name', 'gene_biotype'), 
+      filters = c('chromosome_name','start','end'), 
+      values = list(1, sel.pos-range, sel.pos+range), 
+      mart = gene.ensembl)
+out.bm.genes.region <- out.bm.genes.region %>% mutate(gene_biotype_fac = fct_relevel(as.factor(gene_biotype), 
+      "protein_coding"), external_gene_name = fct_reorder2(external_gene_name, 
+      start_position, gene_biotype_fac, .desc = TRUE))
+print(out.bm.genes.region)
+plot.range <- c(min(sel.pos - range, out.bm.genes.region$start_position), 
+      max(sel.pos + range, out.bm.genes.region$end_position))
+
+#Create the plot
+ggplot(data = locus.frame) + 
+  geom_point(aes(POS, -log10(p.value)), shape = 1) +
+ggplot(data = out.bm.genes.region) + 
+  geom_linerange(aes(x = external_gene_name, ymin = start_position, ymax = end_position, colour = gene_biotype_fac, group = gene_biotype_fac)) +
+  coord_flip() + ylab("") +
+  ylim(plot.range) + 
+  geom_text(aes(x = external_gene_name, y = start_position, label = external_gene_name, colour = gene_biotype_fac), fontface = 2, alpha = I(0.7), hjust = "right", size= 2.5) + 
+  labs(title = "", subtitle = paste0("Genes"), caption = paste0("Data source: ", gene.ensembl@host, " + Data set: ", gene.ensembl@dataset), color = "Gene Biotype") +
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(), 
+        strip.text.y = element_text(angle = 0),
+        legend.position="bottom", 
+        panel.grid.major.y = element_blank()) + 
+  expand_limits(y=c(-1, 1)) +
+  scale_color_manual(values = c("black", metafolio::gg_color_hue(nlevels(out.bm.genes.region$gene_biotype_fac)-1))) +
+plot_layout(ncol = 1, heights = c(6, 2))
+```
+

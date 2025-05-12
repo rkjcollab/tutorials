@@ -1,0 +1,38 @@
+---
+title: "Imputation"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: kable
+    code_folding: hide
+knit: (function(inputFile, encoding) {rmarkdown::render(inputFile, encoding = encoding, output_dir = "/sbgenomics/output-files") })
+
+---
+
+```{r imputation}
+#Setup
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("pcaMethods")
+library("pcaMethods")
+int.file.name <- "../output-files/compound_intensities_clean.txt"
+imp.out.file.name <- "../output-files/compound_intensities_imputed_BPCA.txt"   
+
+#Read the intensities file, set missing values to NA, and save the sample ID column
+intensities <- read.delim(int.file.name, stringsAsFactors = F)
+intensities[intensities == 1] <- NA
+intensities.sample.ids <- intensities$sample_id
+
+#Run the BPCA imputation
+mvd <- pca(intensities[,-1], nPcs = 10, method = "bpca")
+imp <- completeObs(mvd)
+out.frame <- data.frame(sample_id=intensities$sample_id, as.matrix(imp))
+head(out.frame[,1:10])
+dim(out.frame)
+write.table(out.frame, imp.out.file.name,  sep="\t", quote=F, row.names=F, col.names=T)
+```
+

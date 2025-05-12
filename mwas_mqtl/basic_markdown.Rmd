@@ -1,0 +1,25 @@
+---
+title: "Basic R Markdown"
+output: html_document
+---
+
+## Basic R commands
+
+```{r basic}
+#Load a library with functions to process excel files
+library(readxl)
+
+#Use a function to read the excel file and assign the contents to a dataframe
+mtcars <- read_xlsx("/sbgenomics/project-files/mtcars.xlsx", sheet = 1)
+
+#Learn more about a function
+?read_xlsx
+
+#Look at the first few lines of the data frame
+head(mtcars)
+
+#Basic plot using a function
+plot(mtcars$cyl, mtcars$mpg)
+
+```
+
