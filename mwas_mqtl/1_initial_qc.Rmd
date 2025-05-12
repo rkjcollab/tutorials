@@ -8,26 +8,42 @@ output:
     number_sections: true
     df_print: kable
     code_folding: hide
-knit: (function(inputFile, encoding) {rmarkdown::render(inputFile, encoding = encoding, output_dir = "/sbgenomics/output-files") })
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir =
+  paste0(Sys.getenv("RKJCOLLAB"),
+  "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub/output")) })
+  
 
 ---
 
 ```{r setup}
-#Load libraries
-library(ggplot2)
-library(tidyr)
-library(dplyr)
-if (!requireNamespace("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
+# Set working directory - change work_dir to folder that contains input data and
+# has a place for output data
+work_dir <- paste0(
+  Sys.getenv("RKJCOLLAB"), "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub")
+knitr::opts_knit$set(root.dir = work_dir)
 
-BiocManager::install("PCAtools")# when asked to update packages, say "no"
+# Load libraries
+# If need to install tidyverse or PCAtools, uncomment the lines below
+# install.packages("tidyverse")
+library(tidyverse)
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("PCAtools")# when asked to update packages, say "no"
 library(PCAtools)
 
-#Load input data
-intensities <- read.delim("../project-files/compound_intensities_init.txt", stringsAsFactors = F)
-sample.info <- read.delim("../project-files/sample_info.txt", stringsAsFactors = F)
-compound.info <- read.delim("../project-files/compound_info.txt", stringsAsFactors = F) #Not used anywhere but let's understand the information in here
 ```
+
+
+```{r}
+# Load input data
+intensities <- read.delim("input/compound_intensities_init.txt", stringsAsFactors = F)
+sample.info <- read.delim("input/sample_info.txt", stringsAsFactors = F)
+compound.info <- read.delim("input/compound_info.txt", stringsAsFactors = F)
+  # compound.info not used anywhere but let's understand the information in here
+```
+
+
 
 ## Data exploration
 
@@ -54,18 +70,19 @@ paste0("Number compounds: ", dim(intensities)[2]-1)
 #### PCA Scree plot
 
 ```{r scree}
-ordered.intensities <- merge(sample.info[,c("sample_id", "injection_order")], intensities)
-#Order by injection order - then the order of the samples will be the same as in sample.info
+ordered.intensities <-
+  merge(sample.info[,c("sample_id", "injection_order")], intensities)
+# Order by injection order - then the order of the samples will be the same as in sample.info
 ordered.intensities <- ordered.intensities[order(ordered.intensities$injection_order),]
 sample.ids <- ordered.intensities$sample_id
 pca.mat <- as.matrix(t(ordered.intensities[,-c(1,2)]))
-#Remove compounds with no variability so PCA does not fall over
+# Remove compounds with no variability so PCA does not fall over
 no.var.compounds <- which(apply(pca.mat, 1, var) == 0)
 if (length(no.var.compounds) > 0) {
   pca.mat <- pca.mat[-no.var.compounds,]  
 }
-#The colnames of the PCA input matrix and the rownames of the PCA metadata must be set 
-#and must contain the same IDs and in the same order
+# The colnames of the PCA input matrix and the rownames of the PCA metadata must
+# be set and must contain the same IDs and in the same order
 colnames(pca.mat) <- sample.ids
 rownames(sample.info) <- sample.info$sample_id
 pca = pca(pca.mat, metadata = sample.info, center=TRUE, scale=TRUE)
@@ -74,12 +91,16 @@ screeplot(pca, components=getComponents(pca, 1:20), hline = 50)
 
 #### PCA scatterplots
 
-The dashed horizontal and vertical lines denote the specificied number of SD away from the mean, to be used for identifying outliers
+The dashed horizontal and vertical lines denote the specificied number of SD
+away from the mean, to be used for identifying outliers
 
 ##### To change
 
-* Based on the scree plot above, modify the below if necessary to include lower order principal component plots (by setting the x and y parameters of the biplot object)
-* Change the nr.sd variable to the number of SD from the mean that should be used as threshold to identify outlier samples
+* Based on the scree plot above, modify the below if necessary to include lower
+  order principal component plots (by setting the x and y parameters of the
+  biplot object)
+* Change the nr.sd variable to the number of SD from the mean that should be
+  used as threshold to identify outlier samples
 
 ```{r pca}
 nr.sd <- 3
@@ -87,7 +108,7 @@ pca.frame <- pca$rotated
 pca.frame$batch <- sample.info$batch
 pca.frame$class <- sample.info$class
 
-#PC1 and PC2
+# PC1 and PC2
 x.min <- mean(pca.frame$PC1) - nr.sd*sd(pca.frame$PC1)
 x.max <- mean(pca.frame$PC1) + nr.sd*sd(pca.frame$PC1)
 y.min <- mean(pca.frame$PC2) - nr.sd*sd(pca.frame$PC2)
@@ -108,7 +129,8 @@ Remove samples that are PCA outliers (example code that is commented out)
 
 ##### To change
 
-Change the below according to the thresholds decided from the PCA scatterplots above
+Change the below according to the thresholds decided from the PCA scatterplots
+above
 
 ```{r pca_outliers}
 # #PC1 
@@ -145,10 +167,11 @@ Change the below according to the thresholds decided from the PCA scatterplots a
 
 ```{r nr_peaks}
 nrPeaks <- function(i) {
-  return (sum(i != 1)) #In this data set, 1 denotes a missing value
+  return (sum(i != 1))  # in this data set, 1 denotes a missing value
 }
 ordered.intensities <- merge(sample.info[,c("sample_id", "injection_order")], intensities)
-#Order by injection order - then the order of the samples will be the same as in sample.info
+# Order by injection order - then the order of the samples will be the same as
+# in sample.info
 ordered.intensities <- ordered.intensities[order(ordered.intensities$injection_order),-c(1,2)]
 nr.peaks <- apply(ordered.intensities, 1, nrPeaks)
 nr.peaks.frame <- sample.info[order(sample.info$injection_order),]
@@ -167,7 +190,8 @@ meanIntensity <- function(i) {
 mean.intensity <- apply(ordered.intensities, 1, meanIntensity)
 avg.intensity.frame <- sample.info[order(sample.info$injection_order),]
 avg.intensity.frame$mean_intensity <- mean.intensity
-ggplot(avg.intensity.frame , aes(x=injection_order, y=mean_intensity, shape=batch, color=class)) +
+ggplot(avg.intensity.frame,
+       aes(x=injection_order, y=mean_intensity, shape=batch, color=class)) +
   geom_point() +
   scale_shape_manual(values=1:8)
 ```
@@ -179,15 +203,19 @@ wide.frame <- merge(intensities, sample.info)
 keycol <- "compound_id"
 valuecol <- "intensity"
 gathercols <- names(wide.frame)[grep("^C", names(wide.frame))]
-long.frame <- gather_(wide.frame, keycol, valuecol, gathercols)
+long.frame <- pivot_longer(
+  wide.frame, cols = all_of(gathercols), names_to = keycol, values_to = valuecol)
 long.frame <- long.frame[order(long.frame$injection_order),]
 long.frame$log2_intensity <- log2(long.frame$intensity)
-long.frame <- long.frame[long.frame$log2_intensity > 0,]   #Don't want to plot missing values
+long.frame <- long.frame[long.frame$log2_intensity > 0,]  # don't want to plot missing values
 long.frame$day_order <- NA
-#For each batch, subtract the start_injection_order-1, so that the injection order all starts with 1 in each day
+
+# For each batch, subtract the start_injection_order-1, so that the injection
+# order all starts with 1 in each day
 for (batch in unique(long.frame$batch)) {
   min.order <- min(long.frame$injection_order[long.frame$batch == batch])-1
-  long.frame$day_order[long.frame$batch == batch] <- long.frame$injection_order[long.frame$batch == batch] - min.order
+  long.frame$day_order[long.frame$batch == batch] <-
+    long.frame$injection_order[long.frame$batch == batch] - min.order
 }
 long.frame$day_order <- as.factor(long.frame$day_order)
 ggplot(long.frame, aes(x = day_order, y = log2_intensity, color=class)) +
@@ -213,7 +241,9 @@ boxplot(log2_intensity ~ batch, data=long.frame)
 
 ##### To change
 
-* The line that sets compound.cols may need to change according to the naming convention in the compound intensities file; the current code assumes that they all start with C.
+* The line that sets compound.cols may need to change according to the naming
+  convention in the compound intensities file; the current code assumes that
+  they all start with C.
 
 ```{r distro_missing_compounds}
 compound.frame <- merge(sample.info, intensities)
@@ -223,11 +253,13 @@ percMissCompounds <- function(i) {
 }
 compound.miss.frame <- compound.frame %>% 
   group_by(class) %>%
-  summarize_at(vars(compound.cols), list(percMissCompounds))
+  summarize_at(vars(all_of(compound.cols)), list(percMissCompounds))
 head(compound.miss.frame[,1:10])
 keycol <- "compound_id"
 valuecol <- "percent_missing"
-compound.miss.long.frame <- gather_(compound.miss.frame, keycol, valuecol, compound.cols)
+compound.miss.long.frame <- pivot_longer(
+  compound.miss.frame, cols = all_of(compound.cols), names_to = keycol,
+  values_to = valuecol)
 ggplot(compound.miss.long.frame, aes(x=percent_missing, fill=class)) +
     geom_histogram(position = 'dodge', breaks=seq(0, 100, 10)) +
     scale_x_continuous(breaks = seq(0, 100, 10))
@@ -238,38 +270,50 @@ ggplot(compound.miss.long.frame, aes(x=percent_missing, fill=class)) +
 ##### To change
 
 * Set the qc.classes variable to the possible class values of QC samples
-* Set the max.perc.research.missingness variable to the maximum percentage allowed missingness in research samples; defaults to 20\%
+* Set the max.perc.research.missingness variable to the maximum percentage
+  allowed missingness in research samples; defaults to 20\%
 
 ```{r remove_high_missing_compounds}
 qc.classes <- c("instrument_QC", "prep_QC")
 max.perc.research.missingness <- 20
-compound.research.frame <- merge(sample.info[!(sample.info$class %in% qc.classes),], intensities)
-compound.cols <- names(compound.research.frame)[startsWith(names(compound.research.frame), "C")]
+compound.research.frame <-
+  merge(sample.info[!(sample.info$class %in% qc.classes),], intensities)
+compound.cols <-
+  names(compound.research.frame)[startsWith(names(compound.research.frame), "C")]
 compound.research.miss.frame <- compound.research.frame %>% 
-  summarize_at(vars(compound.cols), list(percMissCompounds))
+  summarize_at(vars(all_of(compound.cols)), list(percMissCompounds))
 head(compound.research.miss.frame[,1:10])
 head(t(compound.research.miss.frame[,1:10]))
 compound.research.miss.long.frame <- t(compound.research.miss.frame)
 sum(compound.research.miss.long.frame > max.perc.research.missingness)
-miss.remove.list <- rownames(compound.research.miss.long.frame)[compound.research.miss.long.frame > max.perc.research.missingness]
+miss.remove.list <-
+  rownames(compound.research.miss.long.frame)[compound.research.miss.long.frame >
+                                                max.perc.research.missingness]
 ```
 
 #### Identify compounds present only in research samples
 
-These compounds must be removed as they cannot be normalized by methods that assume QC samples.
-Note that if a compound has a large % missingness in QC samples (but is detected in a small number of QC samples]), 
-it is indicative of perhaps not really being detected in the QC samples, and hence these compounds should be removed too 
-(to much missingness in QC samples may also affect normalization).
+These compounds must be removed as they cannot be normalized by methods that
+assume QC samples.
+Note that if a compound has a large % missingness in QC samples (but is detected
+in a small number of QC samples]), it is indicative of perhaps not really being
+detected in the QC samples, and hence these compounds should be removed too 
+(too much missingness in QC samples may also affect normalization).
 
 ##### To change
 
-* Set the max.perc.qc.missingness variable to the maximum percentage allowed missingness in QC samples; defaults to 80\%
+* Set the max.perc.qc.missingness variable to the maximum percentage allowed
+  missingness in QC samples; defaults to 80\%
 
 ```{r remove_research_only_compounds}
 max.perc.qc.missingness <- 80
-compound.qc.miss.long.frame <- compound.miss.long.frame[compound.miss.long.frame$class %in% qc.classes,]
-compound.qc.miss.long.frame <- compound.qc.miss.long.frame[!(compound.qc.miss.long.frame$compound_id %in% miss.remove.list),]
-researchonly.remove.list <- unique(compound.qc.miss.long.frame$compound_id[compound.qc.miss.long.frame$percent_missing > max.perc.qc.missingness])
+compound.qc.miss.long.frame <-
+  compound.miss.long.frame[compound.miss.long.frame$class %in% qc.classes,]
+compound.qc.miss.long.frame <- compound.qc.miss.long.frame[
+  !(compound.qc.miss.long.frame$compound_id %in% miss.remove.list),]
+researchonly.remove.list <-
+  unique(compound.qc.miss.long.frame$compound_id[
+    compound.qc.miss.long.frame$percent_missing > max.perc.qc.missingness])
 length(researchonly.remove.list)
 ```
 
@@ -277,27 +321,35 @@ length(researchonly.remove.list)
 
 ##### To change
 
-* Set the cv.threshold variable to the maximum CV allowed in QC samples; defaults to 0.3
+* Set the cv.threshold variable to the maximum CV allowed in QC samples;
+  defaults to 0.3
 
 ```{r remove_CV_compounds}
 cv.threshold <- 0.3
-compound.qc.frame <- merge(sample.info[(sample.info$class %in% qc.classes),], intensities[,!(colnames(intensities) %in% c(miss.remove.list, researchonly.remove.list))])
-compound.cols <- names(compound.qc.frame)[startsWith(names(compound.qc.frame), "C")]
+compound.qc.frame <- merge(
+  sample.info[(sample.info$class %in% qc.classes),],
+  intensities[,!(colnames(intensities) %in%
+                   c(miss.remove.list, researchonly.remove.list))])
+compound.cols <-
+  names(compound.qc.frame)[startsWith(names(compound.qc.frame), "C")]
 cV <- function(x) {
   x <- x[x != 1]
   return(sd(x)/mean(x))
 }
 cv.frame <- compound.qc.frame %>% 
   group_by(class) %>%
-  summarize_at(vars(compound.cols), list(cV))
+  summarize_at(vars(all_of(compound.cols)), list(cV))
 head(cv.frame[,1:10])
 keycol <- "compound_id"
 valuecol <- "cv"
-cv.long.frame <- gather_(cv.frame, keycol, valuecol, compound.cols)
+cv.long.frame <- pivot_longer(
+  cv.frame, cols = all_of(compound.cols), names_to = keycol, values_to = valuecol)
 ggplot(cv.long.frame, aes(x=cv, fill=class)) +
-    geom_histogram(position = 'dodge', breaks=seq(0, max(cv.long.frame$cv)+0.1, 0.1)) +
+    geom_histogram(position = 'dodge',
+                   breaks=seq(0, max(cv.long.frame$cv)+0.1, 0.1)) +
     scale_x_continuous(breaks = seq(0, max(cv.long.frame$cv+0.1), 0.1))
-cv.remove.list <- unique(cv.long.frame$compound_id[cv.long.frame$cv > cv.threshold])
+cv.remove.list <- unique(
+  cv.long.frame$compound_id[cv.long.frame$cv > cv.threshold])
 length(cv.remove.list)
 
 ```
@@ -305,27 +357,35 @@ length(cv.remove.list)
 #### Write sample and compound failures and create a clean output file
 
 ```{r write_output}
-#Write files with information on sample and compound failures
-#write.table(outlier.frame, 
-#           "sample_QC_failures.txt",
+# Write files with information on sample and compound failures
+# write.table(outlier.frame,
+#             "output/sample_QC_failures.txt",
 #             sep="\t", quote=F, row.names=F, col.names=T)
-compound.failure.frame <- data.frame(compound_id=c(miss.remove.list, researchonly.remove.list, cv.remove.list),
-                       reason=c(rep("High % missing values", length(miss.remove.list)),
-                                rep("Not in QC samples", length(researchonly.remove.list)),
-                                rep("High CV in QC samples", length(cv.remove.list))))
+compound.failure.frame <- data.frame(
+  compound_id=c(miss.remove.list, researchonly.remove.list, cv.remove.list),
+  reason=c(rep("High % missing values", length(miss.remove.list)),
+           rep("Not in QC samples", length(researchonly.remove.list)),
+           rep("High CV in QC samples", length(cv.remove.list))))
 write.table(compound.failure.frame,
-             "../output-files/compound_QC_failures.txt",
-             sep="\t", quote=F, row.names=F, col.names=T)
+            "output/compound_QC_failures.txt",
+            sep="\t", quote=F, row.names=F, col.names=T)
 
-#Write clean files with sample and compound QC failures removed
-#(note that sample failures were removed from intensities prior to compound QC)
-keep.cols <- names(intensities)[!(names(intensities) %in% compound.failure.frame$compound_id)]
+# Write clean files with sample and compound QC failures removed
+# (note that sample failures were removed from intensities prior to compound QC)
+keep.cols <-
+  names(intensities)[!(names(intensities) %in% compound.failure.frame$compound_id)]
 dim(intensities)
 intensities <- intensities[,keep.cols]
 dim(intensities)
 write.table(intensities,
-             "../output-files/compound_intensities_clean.txt",
-             sep="\t", quote=F, row.names=F, col.names=T)
+            "output/compound_intensities_clean.txt",
+            sep="\t", quote=F, row.names=F, col.names=T)
 
+```
+
+## Session Info
+
+```{r}
+sessionInfo()
 ```
 
