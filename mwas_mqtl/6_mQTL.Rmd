@@ -28,6 +28,7 @@ knitr::opts_knit$set(root.dir = work_dir)
 library(MatrixEQTL)
 # install.packages("metafolio")
 library(metafolio)
+BiocManager::install("biomaRt")
 library(biomaRt) 
 library(tidyverse)
 # install.packages("patchwork")
@@ -108,8 +109,6 @@ head(assoc.frame, 20)
 
 An excellent alternative online resource: http://locuszoom.org
 
-*TODO: temp using GRCh38 since GRCh37 is down!*
-
 ```{r locuszoom, fig.width=10, fig.height=10}
 # First, extract the chromosome nr and position
 assoc.frame$CHR <- 11
@@ -127,10 +126,13 @@ locus.frame <- assoc.frame[
 ]
 
 # Annotate the gene region using biomaRt
-# gene.ensembl <- useEnsembl(
-#   biomart = "ensembl", dataset = "hsapiens_gene_ensembl", GRCh = 37)
 gene.ensembl <- useEnsembl(
-  biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+  biomart = 'genes', dataset = 'hsapiens_gene_ensembl', version = 'GRCh37')
+# If GRCh37 is down, can uncomment code below to use GRCh38. This gives the
+# WRONG annotations, but may be helpful for giving an example in the tutorial
+# gene.ensembl <- useEnsembl(
+#   biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+
   #  we will need an additional mart for genes
 out.bm.genes.region <- getBM(
   attributes = c('start_position','end_position','ensembl_gene_id',
