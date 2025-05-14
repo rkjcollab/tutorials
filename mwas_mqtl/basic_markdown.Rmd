@@ -3,6 +3,17 @@ title: "Basic R Markdown"
 output: html_document
 ---
 
+## Basic setup
+
+```{r setup}
+# Set working directory - change work_dir to folder that contains input data and
+# has a place for output data
+work_dir <- paste0(
+  Sys.getenv("RKJCOLLAB"), "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub")
+knitr::opts_knit$set(root.dir = work_dir)
+
+```
+
 ## Basic R commands
 
 ```{r basic}
@@ -10,7 +21,7 @@ output: html_document
 library(readxl)
 
 #Use a function to read the excel file and assign the contents to a dataframe
-mtcars <- read_xlsx("/sbgenomics/project-files/mtcars.xlsx", sheet = 1)
+mtcars <- read_xlsx("mtcars.xlsx", sheet = 1)
 
 #Learn more about a function
 ?read_xlsx

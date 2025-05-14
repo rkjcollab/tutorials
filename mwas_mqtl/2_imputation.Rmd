@@ -8,19 +8,33 @@ output:
     number_sections: true
     df_print: kable
     code_folding: hide
-knit: (function(inputFile, encoding) {rmarkdown::render(inputFile, encoding = encoding, output_dir = "/sbgenomics/output-files") })
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir =
+  paste0(Sys.getenv("RKJCOLLAB"),
+  "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub/output")) })
 
 ---
 
-```{r imputation}
-#Setup
-if (!requireNamespace("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
+```{r setup}
+# Set working directory - change work_dir to folder that contains input data and
+# has a place for output data
+work_dir <- paste0(
+  Sys.getenv("RKJCOLLAB"), "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub")
+knitr::opts_knit$set(root.dir = work_dir)
 
-BiocManager::install("pcaMethods")
+# Load libraries
+# If need to install pcaMethods, uncomment the lines below
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("pcaMethods")
 library("pcaMethods")
-int.file.name <- "../output-files/compound_intensities_clean.txt"
-imp.out.file.name <- "../output-files/compound_intensities_imputed_BPCA.txt"   
+
+```
+
+
+```{r imputation}
+int.file.name <- "output/compound_intensities_clean.txt"
+imp.out.file.name <- "output/compound_intensities_imputed_BPCA.txt"   
 
 #Read the intensities file, set missing values to NA, and save the sample ID column
 intensities <- read.delim(int.file.name, stringsAsFactors = F)
@@ -34,5 +48,11 @@ out.frame <- data.frame(sample_id=intensities$sample_id, as.matrix(imp))
 head(out.frame[,1:10])
 dim(out.frame)
 write.table(out.frame, imp.out.file.name,  sep="\t", quote=F, row.names=F, col.names=T)
+
 ```
 
+## Session Info
+
+```{r}
+sessionInfo()
+```

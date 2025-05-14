@@ -8,21 +8,37 @@ output:
     number_sections: true
     df_print: kable
     code_folding: hide
-knit: (function(inputFile, encoding) {rmarkdown::render(inputFile, encoding = encoding, output_dir = "/sbgenomics/output-files") })
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir =
+  paste0(Sys.getenv("RKJCOLLAB"),
+  "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub/output")) })
 
 ---
+
+```{r setup}
+# Set working directory - change work_dir to folder that contains input data and
+# has a place for output data
+work_dir <- paste0(
+  Sys.getenv("RKJCOLLAB"), "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub")
+knitr::opts_knit$set(root.dir = work_dir)
+
+# Load libraries
+library(ggplot2)
+
+```
 
 ## Association
 
 ```{r association}
-library(ggplot2)
+intensities <-
+  read.delim("output/compound_intensities_assoc.txt", stringsAsFactors = F)
+sample.info <- read.delim("input/sample_info.txt")
+case.rows <-
+  intensities$sample_id %in% sample.info$sample_id[sample.info$class == "case"]
+control.rows <-
+  intensities$sample_id %in% sample.info$sample_id[sample.info$class == "control"]
 
-intensities <- read.delim("../output-files/compound_intensities_assoc.txt", stringsAsFactors = F)
-sample.info <- read.delim("../project-files/sample_info.txt")
-case.rows <- intensities$sample_id %in% sample.info$sample_id[sample.info$class == "case"]
-control.rows <- intensities$sample_id %in% sample.info$sample_id[sample.info$class == "control"]
-
-assoc.out.file <- "../output-files/assoc_results.txt"
+assoc.out.file <- "output/assoc_results.txt"
 for (i in 2:ncol(intensities)) {
   compound <- names(intensities)[i]
   ttest <- t.test(intensities[case.rows,i], intensities[control.rows,i])
@@ -31,7 +47,9 @@ for (i in 2:ncol(intensities)) {
   control_mean <- ttest$estimate[2]
   log2_fold_change <- case_mean - control_mean
   out.frame <- data.frame(compound, log2_fold_change, p_value)
-  write.table(out.frame, assoc.out.file,  sep="\t", quote=F, row.names=F, col.names=(i==2), append=(i!=2))
+  write.table(
+    out.frame, assoc.out.file,  sep="\t", quote=F, row.names=F,
+    col.names=(i==2), append=(i!=2))
 }
 ```
 
@@ -40,7 +58,8 @@ for (i in 2:ncol(intensities)) {
 ```{r volcano}
 assoc.frame <- read.delim(assoc.out.file)
 dim(assoc.frame)
-ggplot(data = assoc.frame, aes(x = log2_fold_change, y = -1*log10(p_value))) + geom_point()
+ggplot(data = assoc.frame,
+       aes(x = log2_fold_change, y = -1*log10(p_value))) + geom_point()
 ```
 
 ## Assess significance
@@ -49,4 +68,10 @@ ggplot(data = assoc.frame, aes(x = log2_fold_change, y = -1*log10(p_value))) + g
 hist(assoc.frame$p_value, xlab="p_value", main="Histogram of p-values")
 assoc.frame$fdr_p_value <- p.adjust(assoc.frame$p_value, method = "fdr")
 summary(assoc.frame$fdr_p_value)
+```
+
+## Session Info
+
+```{r}
+sessionInfo()
 ```

@@ -8,53 +8,88 @@ output:
     number_sections: true
     df_print: kable
     code_folding: hide
-knit: (function(inputFile, encoding) {rmarkdown::render(inputFile, encoding = encoding, output_dir = "/sbgenomics/output-files") })
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir =
+  paste0(Sys.getenv("RKJCOLLAB"),
+  "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub/output")) })
 ---
 
 ```{r setup}
-qc.classes <- c("instrument_QC", "prep_QC")
-compound.file <- "../project-files/compound_intensities_norm_SERFF.txt"
-compound.info.file <- "../project-files/compound_info.txt"
-sample.info.file <- "../project-files/sample_info.txt"
-out.file <- "../output-files/compound_intensities_assoc.txt"
-intensities <- read.delim(compound.file, stringsAsFactors = F)
-sample.info <- read.delim(sample.info.file)
-#Exclude QC samples from this analysis
-sample.info <- sample.info[!(sample.info$class %in% qc.classes),]   
-ordered.intensities <- merge(sample.info[,c("sample_id", "injection_order")], intensities)
-#Order by injection order - then the order of the samples will be the same as in sample.info
-ordered.intensities <- ordered.intensities[order(ordered.intensities$injection_order),]
+# Set working directory - change work_dir to folder that contains input data and
+# has a place for output data
+work_dir <- paste0(
+  Sys.getenv("RKJCOLLAB"), "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub")
+knitr::opts_knit$set(root.dir = work_dir)
 
+# Load libraries
 library(tidyr)
 library(dplyr)
 library(ggplot2)
 ```
 
+```{r load_data}
+qc.classes <- c("instrument_QC", "prep_QC")
+compound.file <- "output/compound_intensities_norm_SERFF.txt"
+compound.info.file <- "input/compound_info.txt"
+sample.info.file <- "input/sample_info.txt"
+out.file <- "output/compound_intensities_assoc.txt"
+
+intensities <- read.delim(compound.file, stringsAsFactors = F)
+sample.info <- read.delim(sample.info.file)
+# Exclude QC samples from this analysis
+sample.info <- sample.info[!(sample.info$class %in% qc.classes),]   
+ordered.intensities <-
+  merge(sample.info[,c("sample_id", "injection_order")], intensities)
+# Order by injection order - then the order of the samples will be the same as
+# in sample.info
+ordered.intensities <- ordered.intensities[order(ordered.intensities$injection_order),]
+
+```
+
 ## Log2 transformation
 
-Visually checek the transformation
+Visually check the transformation
 
 ```{r log2}
 log2.tf.frame <- as.data.frame(apply(ordered.intensities[,-c(1,2)], 2, log2 ))
 log2.tf.frame$sample_id <- ordered.intensities$sample_id
 dim(log2.tf.frame)
 
-#Get frame to plot the distribution
+# Get frame to plot the distribution
 wide.frame <- log2.tf.frame
 keycol <- "compound_id"
 valuecol <- "log2_intensity"
 gathercols <- names(wide.frame)[grep("^C", names(wide.frame))]
 long.frame <- gather_(wide.frame, keycol, valuecol, gathercols)
+long.frame <- as.data.frame(pivot_longer(
+  wide.frame, cols = all_of(gathercols), names_to = keycol, values_to = valuecol)) %>%
+  dplyr::mutate(
+    compound_id = factor(
+      compound_id,
+      levels = unique(compound_id[order(as.numeric(gsub("^C", "", compound_id)))]))) %>%
+  dplyr::arrange(compound_id)
 
-#Plot the log2 distribution of each compound
+# Plot the log2 distribution of each compound
 n <- nrow(log2.tf.frame)
 m <- nrow(long.frame)
-compound.window <- n*50 #Plot 50 compounds at a time
-print(ggplot(long.frame[1:compound.window,], aes(x = compound_id, y = log2_intensity)) + geom_boxplot() + theme(axis.text.x = element_text(angle = 90)))
+compound.window <- n*50  # Plot 50 compounds at a time
+print(
+  ggplot(long.frame[1:compound.window,],
+         aes(x = compound_id, y = log2_intensity)) +
+    geom_boxplot() +
+    theme(axis.text.x = element_text(angle = 90)))
 for (i in 1:(floor(m/compound.window)-1)) {
-  print(ggplot(long.frame[(i*compound.window+1):((i+1)*compound.window),], aes(x = compound_id, y = log2_intensity)) + geom_boxplot() + theme(axis.text.x = element_text(angle = 90)))
+  print(
+    ggplot(long.frame[(i*compound.window+1):((i+1)*compound.window),],
+           aes(x = compound_id, y = log2_intensity)) +
+      geom_boxplot() +
+      theme(axis.text.x = element_text(angle = 90)))
 }
-print(ggplot(long.frame[(floor(m/compound.window)*compound.window+1):(dim(long.frame)[1]),], aes(x = compound_id, y = log2_intensity)) + geom_boxplot() + theme(axis.text.x = element_text(angle = 90)))
+print(
+  ggplot(long.frame[(floor(m/compound.window)*compound.window+1):(dim(long.frame)[1]),],
+         aes(x = compound_id, y = log2_intensity)) +
+    geom_boxplot() +
+    theme(axis.text.x = element_text(angle = 90)))
 ```
 
 ## Histograms
@@ -62,8 +97,10 @@ print(ggplot(long.frame[(floor(m/compound.window)*compound.window+1):(dim(long.f
 Plot the histograms of couple of compounds
 
 ```{r histograms}
-hist(long.frame$log2_intensity[long.frame$compound_id == "C32"], xlab="C32", main="")
-hist(long.frame$log2_intensity[long.frame$compound_id == "C36"], xlab="C36", main="")
+hist(long.frame$log2_intensity[long.frame$compound_id == "C32"],
+     xlab="C32", main="")
+hist(long.frame$log2_intensity[long.frame$compound_id == "C36"],
+     xlab="C36", main="")
 ```
 
 ## Write output file for association testing
@@ -74,3 +111,8 @@ out.frame <- log2.tf.frame[,c(last.col, 1:(last.col-1))]
 write.table(out.frame, out.file,  sep="\t", quote=F, row.names=F, col.names=T)
 ```
 
+## Session Info
+
+```{r}
+sessionInfo()
+```

@@ -12,7 +12,6 @@ knit: (function(inputFile, encoding) {
   rmarkdown::render(inputFile, encoding = encoding, output_dir =
   paste0(Sys.getenv("RKJCOLLAB"),
   "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub/output")) })
-  
 
 ---
 
@@ -35,7 +34,7 @@ library(PCAtools)
 ```
 
 
-```{r}
+```{r load_data}
 # Load input data
 intensities <- read.delim("input/compound_intensities_init.txt", stringsAsFactors = F)
 sample.info <- read.delim("input/sample_info.txt", stringsAsFactors = F)

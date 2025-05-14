@@ -8,16 +8,37 @@ output:
     number_sections: true
     df_print: kable
     code_folding: hide
-knit: (function(inputFile, encoding) {rmarkdown::render(inputFile, encoding = encoding, output_dir = "/sbgenomics/output-files") })
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir =
+  paste0(Sys.getenv("RKJCOLLAB"),
+  "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub/output")) })
 
 ---
 
-```{r functions}
+```{r setup}
+# Set working directory - change work_dir to folder that contains input data and
+# has a place for output data
+work_dir <- paste0(
+  Sys.getenv("RKJCOLLAB"), "/Training_Programs/PRIDE/PRIDE_Metabolomics/GitHub")
+knitr::opts_knit$set(root.dir = work_dir)
 
-install.packages(c("doParallel","ranger"), repos = "http://cran.us.r-project.org")
+# Load libraries
+# If need to install doParallel or ranger, uncomment the lines below
+library(ggplot2)
+library(PCAtools)
+# install.packages("doParallel")
+library(doParallel)
+# install.packages("ranger")
+library(ranger)
+
+```
+
+
+```{r functions}
+# TO NOTE: Commented out two class checks and conditional transposes of
+# test_data_x as the class check was broken by package/R updates. Confirmed
+# that code below without them still generates same results as before.
 normSERFF <- function(x, qc.sample.pos, batch.info, injection.order) {
-  library(doParallel)
-  library(ranger)
   
   e <- t(x)
   e_norm = matrix(,nrow=nrow(e),ncol=ncol(e))
@@ -29,12 +50,14 @@ normSERFF <- function(x, qc.sample.pos, batch.info, injection.order) {
   
   cl = makeCluster(detectCores())
   
-  serrfR = function(train = e[,qc.sample.pos],
-                    target = e[,-qc.sample.pos],
-                    num = 10,
-                    batch. = factor(c(batch[qc.sample.pos],batch[-qc.sample.pos])),
-                    time. = c(time[qc.sample.pos],time[-qc.sample.pos]),
-                    sampleType. = c(QC.index[qc.sample.pos],QC.index[-qc.sample.pos]),cl){
+  serrfR = function(
+    train = e[,qc.sample.pos],
+    target = e[,-qc.sample.pos],
+    num = 10,
+    batch. = factor(c(batch[qc.sample.pos],batch[-qc.sample.pos])),
+    time. = c(time[qc.sample.pos],time[-qc.sample.pos]),
+    sampleType. = c(QC.index[qc.sample.pos],QC.index[-qc.sample.pos]),
+    cl) {
     
     
     all = cbind(train, target)
@@ -42,8 +65,11 @@ normSERFF <- function(x, qc.sample.pos, batch.info, injection.order) {
     for(j in 1:nrow(all)){
       for(b in 1:length(unique(batch.))){
         current_batch = levels(batch.)[b]
-        all[j,batch.%in%current_batch][all[j,batch.%in%current_batch] == 0] = rnorm(length(all[j,batch.%in%current_batch][all[j,batch.%in%current_batch] == 0]))
-        all[j,batch.%in%current_batch][is.na(all[j,batch.%in%current_batch])] = rnorm(length(all[j,batch.%in%current_batch][is.na(all[j,batch.%in%current_batch])]),mean = all[j,batch.%in%current_batch][!is.na(all[j,batch.%in%current_batch])])
+        all[j,batch.%in%current_batch][all[j,batch.%in%current_batch] == 0] =
+          rnorm(length(all[j,batch.%in%current_batch][all[j,batch.%in%current_batch] == 0]))
+        all[j,batch.%in%current_batch][is.na(all[j,batch.%in%current_batch])] =
+          rnorm(length(all[j,batch.%in%current_batch][is.na(all[j,batch.%in%current_batch])]),
+                mean = all[j,batch.%in%current_batch][!is.na(all[j,batch.%in%current_batch])])
       }
     }
     
@@ -53,18 +79,24 @@ normSERFF <- function(x, qc.sample.pos, batch.info, injection.order) {
       
       current_batch = levels(batch.)[b]
       
-      train_scale = t(apply(train[,batch.[sampleType.=='qc']%in%current_batch],1,scale))
+      train_scale =
+        t(apply(train[,batch.[sampleType.=='qc']%in%current_batch],1,scale))
       if(is.null(target[,batch.[!sampleType.=='qc']%in%current_batch])){
-        target_scale = t(apply(target[,batch.[!sampleType.=='qc']%in%current_batch],1,scale))
+        target_scale =
+          t(apply(target[,batch.[!sampleType.=='qc']%in%current_batch],1,scale))
       }else{
-        target_scale = scale(target[,batch.[!sampleType.=='qc']%in%current_batch])
+        target_scale =
+          scale(target[,batch.[!sampleType.=='qc']%in%current_batch])
       }
       
       corrs_train[[current_batch]] = cor(t(train_scale), method = "spearman")
       corrs_target[[current_batch]] = cor(t(target_scale), method = "spearman")
     }
     
-    pred = parSapply(cl, X = 1:nrow(all), function(j,all,batch.,ranger, sampleType., time., num,corrs_train,corrs_target){
+    pred = parSapply(
+      cl, X = 1:nrow(all),
+      function(j,all,batch.,ranger, sampleType., time.,
+               num,corrs_train,corrs_target) {
       print(j)
       normalized  = rep(0, ncol(all))
       qc_train_value = list()
@@ -90,13 +122,18 @@ normSERFF <- function(x, qc.sample.pos, batch.info, injection.order) {
         }
         
         train.index_current_batch = sampleType.[batch.%in%current_batch]
-        train_data_y = scale(e_current_batch[j, train.index_current_batch=='qc'],scale=F)
-        train_data_x = apply(e_current_batch[sel_var, train.index_current_batch=='qc'],1,scale)
+        train_data_y =
+          scale(e_current_batch[j, train.index_current_batch=='qc'],scale=F)
+        train_data_x =
+          apply(e_current_batch[sel_var, train.index_current_batch=='qc'],1,scale)
         
-        if(is.null(dim(e_current_batch[sel_var, !train.index_current_batch=='qc']))){
-          test_data_x = t(scale(e_current_batch[sel_var, !train.index_current_batch=='qc']))
+        if(is.null(
+          dim(e_current_batch[sel_var, !train.index_current_batch=='qc']))){
+          test_data_x =
+            t(scale(e_current_batch[sel_var, !train.index_current_batch=='qc']))
         }else{
-          test_data_x = apply(e_current_batch[sel_var, !train.index_current_batch=='qc'],1,scale)
+          test_data_x =
+            apply(e_current_batch[sel_var, !train.index_current_batch=='qc'],1,scale)
         }
         
         train_NA_index  = apply(train_data_x,2,function(x){
@@ -105,17 +142,20 @@ normSERFF <- function(x, qc.sample.pos, batch.info, injection.order) {
         
         train_data_x = train_data_x[,!train_NA_index]
         test_data_x = test_data_x[,!train_NA_index]
+        # Commented out due to version incompatibility
+        # if(!class(test_data_x)=="matrix"){
+        #   test_data_x = t(test_data_x)
+        # }
         
-        if(!class(test_data_x)=="matrix"){
-          test_data_x = t(test_data_x)
-        }
-        
-        good_column = apply(train_data_x,2,function(x){sum(is.na(x))==0}) & apply(test_data_x,2,function(x){sum(is.na(x))==0})
+        good_column = 
+          apply(train_data_x,2,function(x){sum(is.na(x))==0}) &
+          apply(test_data_x,2,function(x){sum(is.na(x))==0})
         train_data_x = train_data_x[,good_column]
         test_data_x = test_data_x[,good_column]
-        if(!class(test_data_x)=="matrix"){
-          test_data_x = t(test_data_x)
-        }
+        # Commented out due to version incompatibility
+        # if(!class(test_data_x)=="matrix"){
+        #   test_data_x = t(test_data_x)
+        # }
         train_data = data.frame(y = train_data_y,train_data_x )
         colnames(train_data) = c("y", paste0("V",1:(ncol(train_data)-1)))
         model = ranger(y~., data = train_data)
@@ -124,18 +164,39 @@ normSERFF <- function(x, qc.sample.pos, batch.info, injection.order) {
         colnames(test_data) = colnames(train_data)[-1]
         
         norm = e_current_batch[j,]
-        norm[train.index_current_batch=='qc'] = e_current_batch[j, train.index_current_batch=='qc']/((predict(model, data = train_data)$prediction+mean(e_current_batch[j,train.index_current_batch=='qc'],na.rm=TRUE))/mean(e_current_batch[j,train.index_current_batch=='qc'],na.rm=TRUE))
+        norm[train.index_current_batch=='qc'] =
+          e_current_batch[j, train.index_current_batch=='qc'] /
+          ((predict(model, data = train_data)$prediction +
+              mean(e_current_batch[j,train.index_current_batch=='qc'],na.rm=TRUE)) /
+             mean(e_current_batch[j,train.index_current_batch=='qc'],na.rm=TRUE))
         
-        norm[!train.index_current_batch=='qc'] =(e_current_batch[j,!train.index_current_batch=='qc'])/((predict(model,data = test_data)$predictions  + mean(e_current_batch[j, !train.index_current_batch=='qc'],na.rm=TRUE))/(median(e_current_batch[j,!train.index_current_batch=='qc'],na.rm = TRUE)))
-        norm[train.index_current_batch=='qc'] = norm[train.index_current_batch=='qc']/(median(norm[train.index_current_batch=='qc'],na.rm=TRUE)/median(all[j,sampleType.=='qc'],na.rm=TRUE))
-        norm[!train.index_current_batch=='qc'] = norm[!train.index_current_batch=='qc']/(median(norm[!train.index_current_batch=='qc'],na.rm=TRUE)/median(all[j,!sampleType.=='qc'],na.rm=TRUE))
-        norm[!is.finite(norm)] = rnorm(length(norm[!is.finite(norm)]),sd = sd(norm[is.finite(norm)],na.rm=TRUE)*0.01)
+        norm[!train.index_current_batch=='qc'] =
+          (e_current_batch[j,!train.index_current_batch=='qc']) /
+          ((predict(model,data = test_data)$predictions +
+              mean(e_current_batch[j, !train.index_current_batch=='qc'],na.rm=TRUE)) /
+             (median(e_current_batch[j,!train.index_current_batch=='qc'],na.rm = TRUE)))
+        norm[train.index_current_batch=='qc'] =
+          norm[train.index_current_batch=='qc'] /
+          (median(norm[train.index_current_batch=='qc'],na.rm=TRUE) /
+             median(all[j,sampleType.=='qc'],na.rm=TRUE))
+        norm[!train.index_current_batch=='qc'] =
+          norm[!train.index_current_batch=='qc'] /
+          (median(norm[!train.index_current_batch=='qc'],na.rm=TRUE) /
+             median(all[j,!sampleType.=='qc'],na.rm=TRUE))
+        norm[!is.finite(norm)] =
+          rnorm(length(norm[!is.finite(norm)]),
+                sd = sd(norm[is.finite(norm)],na.rm=TRUE)*0.01)
         normalized[batch.%in%current_batch] = norm
         
-        qc_train_value[[b]] = train_data_y + mean(e_current_batch[j, train.index_current_batch=='qc'])
-        qc_predict_value[[b]] = predict(model,data = train_data)$predictions + mean(e_current_batch[j, train.index_current_batch=='qc'])
+        qc_train_value[[b]] =
+          train_data_y + mean(e_current_batch[j, train.index_current_batch=='qc'])
+        qc_predict_value[[b]] =
+          predict(model,data = train_data)$predictions + 
+          mean(e_current_batch[j, train.index_current_batch=='qc'])
         sample_value[[b]] = e_current_batch[j,!train.index_current_batch=='qc']
-        sample_predict_value[[b]] = predict(model,data = test_data)$predictions  + mean(e_current_batch[j, !train.index_current_batch=='qc'])
+        sample_predict_value[[b]] =
+          predict(model,data = test_data)$predictions + 
+          mean(e_current_batch[j, !train.index_current_batch=='qc'])
         
       }
       
@@ -146,32 +207,39 @@ normSERFF <- function(x, qc.sample.pos, batch.info, injection.order) {
     normed_target = normed[,!sampleType.=='qc']
     
     for(i in 1:nrow(normed_target)){
-      normed_target[i,is.na(normed_target[i,])] = rnorm(sum(is.na(normed_target[i,])), mean = min(normed_target[i,!is.na(normed_target[i,])], na.rm = TRUE), sd = sd(normed_target[i,!is.na(normed_target[i,])])*0.1)
+      normed_target[i,is.na(normed_target[i,])] =
+        rnorm(sum(is.na(normed_target[i,])),
+              mean = min(normed_target[i,!is.na(normed_target[i,])], na.rm = TRUE),
+              sd = sd(normed_target[i,!is.na(normed_target[i,])])*0.1)
     }
     for(i in 1:nrow(normed_target)){
-      normed_target[i,normed_target[i,]<0] = runif(1) * min(normed_target[i,normed_target[i,]>0], na.rm = TRUE)
+      normed_target[i,normed_target[i,]<0] =
+        runif(1) * min(normed_target[i,normed_target[i,]>0], na.rm = TRUE)
     }
     
     normed_train = normed[,sampleType.=='qc']
     
     for(i in 1:nrow(normed_train)){
-      normed_train[i,is.na(normed_train[i,])] = rnorm(sum(is.na(normed_train[i,])), mean = min(normed_train[i,!is.na(normed_train[i,])], na.rm = TRUE), sd = sd(normed_train[i,!is.na(normed_train[i,])])*0.1)
+      normed_train[i,is.na(normed_train[i,])] =
+        rnorm(sum(is.na(normed_train[i,])),
+              mean = min(normed_train[i,!is.na(normed_train[i,])], na.rm = TRUE),
+              sd = sd(normed_train[i,!is.na(normed_train[i,])])*0.1)
     }
     for(i in 1:nrow(normed_train)){
-      normed_train[i,normed_train[i,]<0] = runif(1) * min(normed_train[i,normed_train[i,]>0], na.rm = TRUE)
+      normed_train[i,normed_train[i,]<0] =
+        runif(1) * min(normed_train[i,normed_train[i,]>0], na.rm = TRUE)
     }
     return(list(normed_train=normed_train,normed_target=normed_target))
   }
   
   serrf_normalized = e
-  serrf_normalized_modeled = serrfR(train = e[,qc.sample.pos], 
-                                    target = e[,-qc.sample.pos], 
-                                    num = num,batch. = factor(c(batch[qc.sample.pos],
-                                                                batch[-qc.sample.pos])),
-                                    time. = c(time[qc.sample.pos],
-                                              time[-qc.sample.pos]),
-                                    sampleType. = c(QC.index[qc.sample.pos],QC.index[-qc.sample.pos]),
-                                    cl)
+  serrf_normalized_modeled = serrfR(
+    train = e[,qc.sample.pos], 
+    target = e[,-qc.sample.pos], 
+    num = num,
+    batch. = factor(c(batch[qc.sample.pos], batch[-qc.sample.pos])),
+    time. = c(time[qc.sample.pos], time[-qc.sample.pos]),
+    sampleType. = c(QC.index[qc.sample.pos], QC.index[-qc.sample.pos]), cl)
   serrf_normalized[,qc.sample.pos] = serrf_normalized_modeled$normed_train
   serrf_normalized[,-qc.sample.pos] = serrf_normalized_modeled$normed_target
   
@@ -184,19 +252,22 @@ normSERFF <- function(x, qc.sample.pos, batch.info, injection.order) {
 
 ## Run normalization
 
-The below has been commented out and the SERFF normalized output provided, as this takes long to run
+The below has been commented out and the SERFF normalized output provided, as
+this takes long to run
 
 ```{r norm}
 # #Set file names and parameters
 # qc.classes <- c("instrument_QC")
-# intensity.file <- "../project-files/compound_intensities_imputed_BPCA.txt"
-# sample.info.file <- "../project-files/sample_info.txt"
+# intensity.file <- "output/compound_intensities_imputed_BPCA.txt"
+# sample.info.file <- "input/sample_info.txt"
 # 
 # #Load input data
 # intensities <- read.delim(intensity.file, stringsAsFactors = F)
 # sample.info <- read.delim(sample.info.file, stringsAsFactors = F)
-# sample.info <- sample.info[!(sample.info$class %in% "prep_QC"),] #To few prep QC to include in the model
-# sample.info <- sample.info[sample.info$batch != "day_1",] #Only instrument QC samples were run on day 1
+# sample.info <- sample.info[!(sample.info$class %in% "prep_QC"),]
+#   # too few prep QC to include in the model
+# sample.info <- sample.info[sample.info$batch != "day_1",]
+#   # only instrument QC samples were run on day 1
 # intensities <- merge(sample.info, intensities)
 # intensities <- intensities[order(intensities$injection_order),]
 # sample.ids <- intensities$sample_id
@@ -214,23 +285,21 @@ The below has been commented out and the SERFF normalized output provided, as th
 # names(norm.frame) <- c("sample_id", compound.ids)
 # head(norm.frame[,1:10])
 # dim(norm.frame)
-# write.table(norm.frame, "../output-files/compound_intensities_norm_SERFF.txt",  sep="\t", quote=F, row.names=F, col.names=T)
+# write.table(
+#   norm.frame, "output/compound_intensities_norm_SERFF.txt", 
+#   sep="\t", quote=F, row.names=F, col.names=T)
 ```
 
 ## Compare PCA for clean, imputed and normalized data
 
 ```{r pca}
-library(ggplot2)
-if (!requireNamespace("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
 
-BiocManager::install("PCAtools")# when asked to update packages, say "no"
-library(PCAtools)
-
-#Do the PCA for clean, imputed and normalized data
-sample.info <- read.delim("../project-files/sample_info.txt", stringsAsFactors = F)
-sample.info <- sample.info[!(sample.info$class %in% "prep_QC"),] #To few prep QC to include in the model
-sample.info <- sample.info[sample.info$batch != "day_1",] #Only instrument QC samples were run on day 1
+# Do the PCA for clean, imputed and normalized data
+sample.info <- read.delim("input/sample_info.txt", stringsAsFactors = F)
+sample.info <- sample.info[!(sample.info$class %in% "prep_QC"),]
+  # too few prep QC to include in the model
+sample.info <- sample.info[sample.info$batch != "day_1",]
+  # only instrument QC samples were run on day 1
 sample.info$class[sample.info$class %in% c("instrument_QC")] <- "QC"
 sample.info$class[sample.info$class %in% c("case", "control")] <- "research"
 pca.list <- list()
@@ -241,31 +310,42 @@ i <- 0
 for (dataset in datasets) {
   i <- i + 1
   
-  intensities <- read.delim(paste0("../project-files/compound_intensities_", dataset, ".txt"), stringsAsFactors = F)
-  ordered.intensities <- merge(sample.info[,c("sample_id", "injection_order")], intensities)
-  #Order by injection order - then the order of the samples will be the same as in sample.info
-  ordered.intensities <- ordered.intensities[order(ordered.intensities$injection_order),]
+  intensities <- read.delim(
+    paste0("output/compound_intensities_", dataset, ".txt"), stringsAsFactors = F)
+  ordered.intensities <- merge(
+    sample.info[,c("sample_id", "injection_order")], intensities)
+  # Order by injection order - then the order of the samples will be the same
+  # as in sample.info
+  ordered.intensities <-
+    ordered.intensities[order(ordered.intensities$injection_order),]
   
   sample.ids <- ordered.intensities$sample_id
   pca.mat <- as.matrix(t(ordered.intensities[,-c(1,2)]))
-  #Remove compounds with no variability so PCA does not fall over
+  
+  # Remove compounds with no variability so PCA does not fall over
   no.var.compounds <- which(apply(pca.mat, 1, var) == 0)
   if (length(no.var.compounds) > 0) {
     pca.mat <- pca.mat[-no.var.compounds,]  
   }
-  #The colnames of the PCA input matrix and the rownames of the PCA metadata must be set 
-  #and must contain the same IDs and in the same order
+  # The colnames of the PCA input matrix and the rownames of the PCA metadata
+  # must be set and must contain the same IDs and in the same order
   colnames(pca.mat) <- sample.ids
   pca = pca(pca.mat,  center=TRUE, scale=TRUE)
   pca.list[[i]] <- pca
 }
 
-#Scree plots
-screeplot(pca.list[[1]], components=getComponents(pca, 1:10), hline = 50, title=datasets[1])
-screeplot(pca.list[[2]], components=getComponents(pca, 1:10), hline = 50, title=datasets[2])
-screeplot(pca.list[[3]], components=getComponents(pca, 1:10), hline = 50, title=datasets[3])
+# Scree plots
+screeplot(
+  pca.list[[1]], components=getComponents(pca, 1:10),
+  hline = 50, title=datasets[1])
+screeplot(
+  pca.list[[2]], components=getComponents(pca, 1:10),
+  hline = 50, title=datasets[2])
+screeplot(
+  pca.list[[3]], components=getComponents(pca, 1:10),
+  hline = 50, title=datasets[3])
 
-#Scatter plots
+# Scatter plots
 i <- 1
 pca.frame <- pca.list[[i]]$rotated
 pca.frame$class <- sample.info$class
@@ -308,9 +388,10 @@ datasets <- c("clean",
 i <- 0
 for (dataset in datasets) {
   i <- i + 1
-  #Subset to the methods of interest - pre-norm and the best 3 methods
-  plot.frame <- read.delim(paste0("../project-files/compound_intensities_", dataset, ".txt"), stringsAsFactors = F)
-  #Get the frame to plot
+  # Subset to the methods of interest - pre-norm and the best 3 methods
+  plot.frame <- read.delim(
+    paste0("output/compound_intensities_", dataset, ".txt"), stringsAsFactors = F)
+  # Get the frame to plot
   plot.frame <- merge(sample.info, plot.frame)
   plot.frame <- plot.frame[order(plot.frame$injection_order),]
   mean.intensity <- apply(plot.frame[,-c(1:4)], 1, mean)
@@ -320,7 +401,8 @@ for (dataset in datasets) {
   plots.frame <- rbind(plots.frame, plot.frame)
 }
 
-ggplot(plots.frame , aes(x=injection_order, y=mean_intensity, color=class, shape=class)) +
+ggplot(plots.frame,
+       aes(x=injection_order, y=mean_intensity, color=class, shape=class)) +
   geom_point() + 
   theme_bw() + 
   scale_color_manual(values = c("red", "grey")) +
@@ -333,14 +415,21 @@ ggplot(plots.frame , aes(x=injection_order, y=mean_intensity, color=class, shape
 ### LysoPC
 
 ```{r specific_intensity_1}
-#Add a field to plots.frame with thee specific intensity to plot
-plot.compound.id <- "C3"   #This is LysoPC
+# Add a field to plots.frame with thee specific intensity to plot
+plot.compound.id <- "C3"  # This is LysoPC
 plots.frame$compound_intensity <- plots.frame[,plot.compound.id]
-#Do the plot
-ggplot(plots.frame , aes(x=injection_order, y=compound_intensity, color=class, shape=class)) +
+# Do the plot
+ggplot(plots.frame,
+       aes(x=injection_order, y=compound_intensity, color=class, shape=class)) +
   geom_point() + 
   theme_bw() + 
   scale_color_manual(values = c("red", "grey")) +
   facet_wrap(~dataset)
 
+```
+
+## Session Info
+
+```{r}
+sessionInfo()
 ```
